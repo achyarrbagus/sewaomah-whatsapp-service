@@ -148,7 +148,19 @@ function createAdapter({
         reconnectTimer = null;
       }
     };
-    c.on('qr', mine((qr) => { alive(); setState('waiting_qr', { qr: String(qr) }); }));
+    c.on('qr', mine((qr) => {
+      alive();
+      if (!c.pupPage) { setState('waiting_qr', { qr: String(qr) }); return; }
+      const before = status;
+      Promise.resolve().then(() => c.pupPage.evaluate(() =>
+        document.querySelector('[data-ref] canvas')?.parentElement?.getAttribute('data-ref') ||
+        document.querySelector('[data-ref]')?.getAttribute('data-ref') || null
+      )).then((visibleQr) => {
+        if (c !== current || stopped || status !== before) return;
+        if (visibleQr) setState('waiting_qr', { qr: String(visibleQr) });
+        else logger.warn('wa_qr_unavailable');
+      }).catch(() => logger.warn('wa_qr_unavailable'));
+    }));
     c.on('authenticated', mine(() => { alive(); setState('authenticated'); }));
     c.on('ready', mine(() => { alive(); attempts = 0; setState('ready'); }));
     c.on('auth_failure', mine(() => setState('auth_failure', { reason: 'auth_failure' })));

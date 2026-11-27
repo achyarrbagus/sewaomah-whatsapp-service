@@ -58,6 +58,31 @@ test('state machine: qr only while waiting_qr; authenticated is not ready', asyn
   assert.ok(t.statuses.every((x) => !('qr' in x) || x.qr === null || x.state === 'waiting_qr'));
 });
 
+test('uses the QR shown by WhatsApp instead of the legacy library payload', async () => {
+  const t = setup();
+  await t.adapter.connect();
+  const c = t.clients[0];
+  c.pupPage = { evaluate: async () => 'https://wa.me/settings/linked_devices#test' };
+  c.emit('qr', 'legacy-payload');
+  await waitFor(() => t.adapter.getStatus().qr !== null);
+  assert.equal(t.adapter.getStatus().qr, 'https://wa.me/settings/linked_devices#test');
+});
+
+test('does not reveal a stale QR if authentication completes while it is read', async () => {
+  const t = setup();
+  await t.adapter.connect();
+  const c = t.clients[0];
+  let resolveQr;
+  c.pupPage = { evaluate: () => new Promise((resolve) => { resolveQr = resolve; }) };
+  c.emit('qr', 'legacy-payload');
+  await waitFor(() => typeof resolveQr === 'function');
+  c.emit('authenticated');
+  resolveQr('https://wa.me/settings/linked_devices#test');
+  await sleep(10);
+  assert.equal(t.adapter.getStatus().state, 'authenticated');
+  assert.equal(t.adapter.getStatus().qr, null);
+});
+
 test('group message is ignored', async () => {
   const t = setup();
   const c = await ready(t);

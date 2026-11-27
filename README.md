@@ -13,6 +13,11 @@ All calls carry `Authorization: Bearer $OMI_GATEWAY_SECRET`. whatsapp-web.js is 
 the official WhatsApp Business Platform: WhatsApp Web changes can break it and the
 account can be restricted. Use a dedicated Omi number, never the operational one.
 
+The gateway temporarily pins an upstream `whatsapp-web.js` commit containing the
+login compatibility fix. New WhatsApp Web login pages use the QR shown by the
+browser, which can differ from the library's legacy QR payload. Full pairing
+still needs verification with a dedicated test account.
+
 ## Requirements
 
 Node.js >= 22 and Chromium are required. Run this service as a persistent process on the same host as the Go API; its status endpoint is bound to loopback. The Go API must include the Omi endpoints and use the same gateway secret. The gateway is deployed separately from the Go backend.
