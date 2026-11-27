@@ -1,0 +1,71 @@
+name: WhatsApp service CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whatsapp-service-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+      - run: npm run check
+      - run: npm test
+      - name: Test deployment and rollback
+        run: bash deploy/test-deploy.sh
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_PATH: /opt/sewaomah-whatsapp-service
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      RELEASE: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          test -n "$SSH_KEY" && test -n "$KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+      - name: Upload release
+        env:
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+        run: |
+          tar -czf /tmp/whatsapp-release.tgz package.json package-lock.json ecosystem.config.cjs src
+          opts=(-i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o BatchMode=yes)
+          ssh "${opts[@]}" "$TARGET" "mkdir -p '$DEPLOY_PATH/releases/$RELEASE'"
+          ssh "${opts[@]}" "$TARGET" "tar -xzf - -C '$DEPLOY_PATH/releases/$RELEASE'" < /tmp/whatsapp-release.tgz
+      - name: Activate release
+        env:
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o BatchMode=yes "$TARGET" \
+            "bash -s -- '$DEPLOY_PATH' '$RELEASE'" < deploy/remote-deploy.sh
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

@@ -123,3 +123,30 @@ Go API running and the same `OMI_GATEWAY_SECRET` on both sides.
 - [ ] Start a second gateway with the same `OMI_SESSION_DIR`: it exits 1 (lock held).
 - [ ] Log out the linked device from the phone: `/status` shows `disconnected`/`LOGOUT`, then `waiting_qr`.
 - [ ] Logs contain no message text, phone numbers or QR payload.
+
+## CI/CD
+
+GitHub Actions tests syntax, gateway behavior, and release rollback on pull
+requests and pushes to `main`. Once enabled, a successful push to `main` (or a
+manual run on `main`) deploys this service separately over SSH. Deployment is
+opt-in: set the repository Actions variable `DEPLOY_ENABLED` to `true` after
+the server and secrets are ready. Until then the deploy job is skipped.
+
+Configure these secrets in the GitHub `production` environment:
+`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` (dedicated private key), and
+`DEPLOY_KNOWN_HOSTS` (independently verified SSH host key). Optional repository
+variable `DEPLOY_PORT` defaults to 22. The deployment user needs write access to
+`/opt/sewaomah-whatsapp-service/releases`, Node.js 22+, npm, and PM2. PM2 must
+run under the same user for every release. Install system Chromium and configure
+its executable path in `/etc/sewaomah-whatsapp-service/env` along with the
+shared gateway secret and persistent session directory. The file must be
+readable by the deployment user and valid as both a shell and Node env file.
+
+Each deployment installs locked dependencies in a new release directory without
+downloading Chromium, switches `current`, and restarts `omi-gateway`. It checks
+the authenticated local status endpoint and restores the previous release if
+activation fails. A responding status endpoint confirms the process is alive;
+it does not imply a WhatsApp account is paired. The first deployment has no
+previous release to restore. Session data and the server environment file must
+remain outside the release directory. This workflow does not configure a server,
+connect WhatsApp, or deploy the Go API.
