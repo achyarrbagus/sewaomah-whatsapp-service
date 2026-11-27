@@ -28,4 +28,11 @@ ln -s "$root/releases/old" "$root/current.next"
 node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$root/current.next" "$root/current"
 if MOCK_HEALTH=fail bash deploy/remote-deploy.sh "$root" new; then echo 'Expected failed deployment' >&2; exit 1; fi
 [ "$(readlink "$root/current")" = "$root/releases/old" ]
+cat > "$root/bin/ln" <<'MOCK'
+#!/usr/bin/env bash
+exit 1
+MOCK
+chmod +x "$root/bin/ln"
+if bash deploy/remote-deploy.sh "$root" new; then echo 'Expected activation error' >&2; exit 1; fi
+[ "$(readlink "$root/current")" = "$root/releases/old" ]
 echo 'Deployment and rollback verified'

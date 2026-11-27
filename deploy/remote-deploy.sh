@@ -19,8 +19,8 @@ PUPPETEER_SKIP_DOWNLOAD=true npm ci --omit=dev --ignore-scripts --no-audit --no-
 previous=''
 [ ! -L "$base/current" ] || previous=$(readlink -f "$base/current")
 activate() {
-  ln -sfn "$1" "$base/current.next"
-  node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$base/current.next" "$base/current"
+  ln -sfn "$1" "$base/current.next" || return 1
+  node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$base/current.next" "$base/current" || return 1
   OMI_GATEWAY_ENV_FILE="$env_file" pm2 startOrRestart "$base/current/ecosystem.config.cjs" --only omi-gateway --update-env
 }
 healthy() {
